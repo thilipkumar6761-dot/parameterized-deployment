@@ -60,19 +60,23 @@ pipeline {
         }
 
         
+
 stage('Install Dependencies') {
     steps {
         bat '''
-            echo Checking Python installation...
+            echo Checking Python...
 
             where python
 
             python --version
 
             python -m pip --version
+
+            python -m pip install pytest
         '''
     }
 }
+
 
 
         stage('Run Tests') {
