@@ -59,18 +59,21 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                bat '''
-                    python --version
-                    python -m pip install pytest
+        
+stage('Install Dependencies') {
+    steps {
+        bat '''
+            echo Checking Python installation...
 
-                    if exist requirements.txt (
-                        python -m pip install -r requirements.txt
-                    )
-                '''
-            }
-        }
+            where python
+
+            python --version
+
+            python -m pip --version
+        '''
+    }
+}
+
 
         stage('Run Tests') {
             when {
