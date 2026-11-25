@@ -61,18 +61,19 @@ pipeline {
 
         
 
+
 stage('Install Dependencies') {
     steps {
         bat '''
-            echo Checking Python...
+            echo Checking Python installation...
 
-            where python
+            "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" --version
 
-            python --version
+            "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" -m pip install pytest
 
-            python -m pip --version
-
-            python -m pip install pytest
+            if exist requirements.txt (
+                "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" -m pip install -r requirements.txt
+            )
         '''
     }
 }
