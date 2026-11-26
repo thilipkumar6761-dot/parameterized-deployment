@@ -2,6 +2,10 @@
 pipeline {
     agent any
 
+    environment {
+        PYTHON = 'C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe'
+    }
+
     parameters {
         choice(
             name: 'ENVIRONMENT',
@@ -59,28 +63,20 @@ pipeline {
             }
         }
 
-        
+        stage('Install Dependencies') {
+            steps {
+                bat '''
+                    echo Checking Python...
+                    "%PYTHON%" --version
 
+                    "%PYTHON%" -m pip install pytest
 
-
-stage('Install Dependencies') {
-    steps {
-        bat '''
-            echo Checking Python installation...
-
-            "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" --version
-
-            "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" -m pip install pytest
-
-            if exist requirements.txt (
-                "C:\\Users\\Thilipkumar\\AppData\\Local\\Python\\bin\\python.exe" -m pip install -r requirements.txt
-            )
-        '''
-    }
-}
-
-
-
+                    if exist requirements.txt (
+                        "%PYTHON%" -m pip install -r requirements.txt
+                    )
+                '''
+            }
+        }
 
         stage('Run Tests') {
             when {
@@ -89,26 +85,69 @@ stage('Install Dependencies') {
                 }
             }
             steps {
-                bat 'python -m pytest test_app.py -v'
+                bat '''
+                    "%PYTHON%" -m pytest test_app.py -v
+                '''
             }
         }
 
         stage('Deploy Application') {
             steps {
-                bat '''
-                    if not exist app.py (
-                        echo Application file not found
-                        exit /b 1
-                    )
+                script {
 
-                    if not exist "deploy\\%ENVIRONMENT%" (
-                        mkdir "deploy\\%ENVIRONMENT%"
-                    )
+                    def sshCredentialId
+                    def deployHost
 
-                    copy /Y app.py "deploy\\%ENVIRONMENT%\\app.py"
+                    if (params.DEPLOY_REGION == 'ap-south-1') {
+                        sshCredentialId = 'mumbai-ec2-key'
+                        deployHost = '15.252.137.40'
+                    } else {
+                        sshCredentialId = 'us-east-ec2-key'
+                        deployHost = '98.89.38.181'
+                    }
 
-                    echo Deployment completed successfully
-                '''
+                    withCredentials([
+                        sshUserPrivateKey(
+                            credentialsId: sshCredentialId,
+                            keyFileVariable: 'SSH_KEY',
+                            usernameVariable: 'SSH_USER'
+                        )
+                    ]) {
+
+                        withEnv(["DEPLOY_HOST=${deployHost}"]) {
+
+                            bat '''
+                                echo Fixing SSH key permissions...
+
+                                icacls "%SSH_KEY%" /inheritance:r
+                                icacls "%SSH_KEY%" /remove:g "*S-1-5-32-545"
+                                icacls "%SSH_KEY%" /grant:r "*S-1-5-18:(R)"
+
+                                echo Checking SSH key permissions...
+                                icacls "%SSH_KEY%"
+
+                                if not exist app.py (
+                                    echo Application file not found
+                                    exit /b 1
+                                )
+
+                                echo Connecting to AWS EC2...
+
+                                ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "%SSH_KEY%" %SSH_USER%@%DEPLOY_HOST% "mkdir -p /opt/parameterized-app/%ENVIRONMENT%/%VERSION%"
+
+                                if errorlevel 1 exit /b 1
+
+                                echo Uploading application...
+
+                                scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i "%SSH_KEY%" app.py %SSH_USER%@%DEPLOY_HOST%:/opt/parameterized-app/%ENVIRONMENT%/%VERSION%/app.py
+
+                                if errorlevel 1 exit /b 1
+
+                                echo Application deployed successfully!
+                            '''
+                        }
+                    }
+                }
             }
         }
 
@@ -119,18 +158,18 @@ stage('Install Dependencies') {
                 echo "Tests Enabled: ${params.RUN_TESTS}"
                 echo "Region: ${params.DEPLOY_REGION}"
 
-                echo 'Deployment pipeline completed!'
+                echo 'Deployment completed on AWS EC2!'
             }
         }
     }
 
     post {
         success {
-            echo 'SUCCESS: Deployment completed!'
+            echo 'SUCCESS: Cloud deployment completed!'
         }
 
         failure {
-            echo 'FAILURE: Deployment failed!'
+            echo 'FAILURE: Cloud deployment failed!'
         }
     }
 }
